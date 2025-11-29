@@ -1,0 +1,134 @@
+function RocketProfile(X, R, filename)
+% RocketProfile(X, R, filename)
+% Crea:
+% - vista in pianta (PNG)
+% - solido 3D di rivoluzione (PNG)
+% - file STL dell'oggetto
+% Il tutto con interpolazione spline per profilo liscio.
+
+%% ----- Check input -----
+if nargin < 3
+    error('Usage: RocketProfile(X, R, filename)');
+end
+if ~isvector(X) || ~isvector(R)
+    error('X e R devono essere vettori.');
+end
+X = X(:);
+R = R(:);
+if numel(X) ~= numel(R)
+    error('X e R devono avere la stessa lunghezza.');
+end
+
+if any(R < 0)
+    error('I raggi non possono essere negativi.');
+end
+
+filename = char(filename);
+[folder, base, ext] = fileparts(filename);
+if isempty(ext)
+    ext = '.stl';
+end
+stlfile = fullfile(folder, [base '.stl']);
+png_plan = fullfile(folder, [base '_plan.png']);
+png_3d   = fullfile(folder, [base '_3d.png']);
+
+%% ----- Ordinamento e rimozione duplicati -----
+[X, idx] = sort(X);
+R = R(idx);
+
+[ux, ia] = unique(X,'stable');
+X = ux; 
+R = R(ia);
+
+%% ----- Interpolazione spline (profilo liscio) -----
+nInterp = 800;
+Xi = linspace(min(X), max(X), nInterp);
+Ri = spline(X, R, Xi);
+
+%% ----- Generazione superficie di rivoluzione -----
+nTheta = 240;
+theta  = linspace(0, 2*pi, nTheta);
+
+[Tg, Xg] = meshgrid(theta, Xi);  
+Rg = repmat(Ri, 1, nTheta);
+
+Yg = (Rg .* cos(Tg))';
+Zg = (Rg .* sin(Tg))';
+Xg = Xg';
+
+%% ----- FIGURA 1: Vista in pianta -----
+fig1 = figure('Name','Vista in pianta','NumberTitle','off','Visible','off');
+clf(fig1);
+
+X_poly = [Xi, fliplr(Xi)];
+Y_poly = [Ri, -fliplr(Ri)];
+
+patch(X_poly, Y_poly, [0.6 0.85 1], 'FaceAlpha', 0.7, 'EdgeColor','k');
+hold on;
+plot(Xi, Ri, 'k-', 'LineWidth', 1.2);
+plot(Xi, -Ri, 'k-', 'LineWidth', 1.2);
+plot(Xi, zeros(size(Xi)), 'k:');
+hold off;
+
+axis equal;
+xlabel('X'); ylabel('Y');
+title('Vista in pianta del profilo');
+grid on;
+
+exportgraphics(fig1, png_plan, 'Resolution', 250);
+
+%% ----- FIGURA 2: Solido di rivoluzione 3D -----
+fig2 = figure('Name','Solido 3D','NumberTitle','off','Visible','off');
+clf(fig2);
+
+surf(Xg, Yg, Zg, 'FaceColor', [0.8 0.85 1], 'EdgeColor','none');
+axis equal;
+xlabel('X'); ylabel('Y'); zlabel('Z');
+view(35,20); 
+camlight headlight; lighting gouraud;
+title('Solido di rivoluzione');
+
+exportgraphics(fig2, png_3d, 'Resolution', 250);
+
+%% ----- Conversione in Mesh triangolare + STL -----
+FV = surf2patch(Xg, Yg, Zg, 'triangles');
+V = FV.vertices;
+F = FV.faces;
+
+v1 = V(F(:,2),:) - V(F(:,1),:);
+v2 = V(F(:,3),:) - V(F(:,1),:);
+N = cross(v1, v2, 2);
+N = N ./ max(sqrt(sum(N.^2,2)), eps);
+
+writeSTLbinary(stlfile, F, V, N);
+fprintf('✔ STL creato: %s\n', stlfile);
+fprintf('✔ PNG vista in pianta: %s\n', png_plan);
+fprintf('✔ PNG vista 3D: %s\n', png_3d);
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% --- Funzione: Scrive STL binario ---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function writeSTLbinary(fname, faces, vertices, normals)
+fid = fopen(fname, 'w', 'ieee-le');
+if fid == -1
+    error('Impossibile aprire file: %s', fname);
+end
+
+header = pad("STL created by RocketProfile", 80, 'right');
+fwrite(fid, header, 'char');
+
+ntri = uint32(size(faces,1));
+fwrite(fid, ntri, 'uint32');
+
+for i = 1:ntri
+    fwrite(fid, single(normals(i,:)), 'float32');
+    fwrite(fid, single(vertices(faces(i,1),:)), 'float32');
+    fwrite(fid, single(vertices(faces(i,2),:)), 'float32');
+    fwrite(fid, single(vertices(faces(i,3),:)), 'float32');
+    fwrite(fid, uint16(0), 'uint16');
+end
+
+fclose(fid);
+end
