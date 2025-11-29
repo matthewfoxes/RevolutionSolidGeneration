@@ -2,7 +2,7 @@ function RocketProfile(X, R, filename)
 % RocketProfile(X, R, filename)
 % Crea:
 % - vista in pianta (PNG)
-% - solido 3D di rivoluzione (PNG)
+% - solido 3D effetto acciaio (PNG)
 % - file STL dell'oggetto
 % Il tutto con interpolazione spline per profilo liscio.
 
@@ -77,16 +77,30 @@ grid on;
 
 exportgraphics(fig1, png_plan, 'Resolution', 250);
 
-%% ----- FIGURA 2: Solido di rivoluzione 3D -----
-fig2 = figure('Name','Solido 3D','NumberTitle','off','Visible','off');
+%% ----- FIGURA 2: Solido di rivoluzione 3D effetto acciaio -----
+fig2 = figure('Name','Solido 3D Acciaio','NumberTitle','off','Visible','off');
 clf(fig2);
 
-surf(Xg, Yg, Zg, 'FaceColor', [0.8 0.85 1], 'EdgeColor','none');
+hSurf = surf(Xg, Yg, Zg, ...
+    'FaceColor',[0.8 0.8 0.85], ...
+    'EdgeColor','none', ...
+    'FaceLighting','gouraud', ...
+    'AmbientStrength',0.3, ...
+    'DiffuseStrength',0.7, ...
+    'SpecularStrength',0.9, ...
+    'SpecularExponent',25);
+
 axis equal;
 xlabel('X'); ylabel('Y'); zlabel('Z');
 view(35,20); 
-camlight headlight; lighting gouraud;
-title('Solido di rivoluzione');
+
+% luci multiple leggere per effetto acciaio
+camlight('headlight');      
+camlight('right');          
+lighting gouraud;
+
+material([0.3 0.7 0.9 25 1]); % [ambient,diffuse,specular,specular exponent, backface]
+title('Solido effetto acciaio');
 
 exportgraphics(fig2, png_3d, 'Resolution', 250);
 
@@ -103,7 +117,7 @@ N = N ./ max(sqrt(sum(N.^2,2)), eps);
 writeSTLbinary(stlfile, F, V, N);
 fprintf('✔ STL creato: %s\n', stlfile);
 fprintf('✔ PNG vista in pianta: %s\n', png_plan);
-fprintf('✔ PNG vista 3D: %s\n', png_3d);
+fprintf('✔ PNG 3D effetto acciaio: %s\n', png_3d);
 
 end
 
